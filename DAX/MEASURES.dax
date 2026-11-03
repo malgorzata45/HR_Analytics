@@ -1,0 +1,453 @@
+﻿// HR ANALYTICS — 38 miar do czterech stron raportu Dark Neon.
+// Najpierw utwórz model: DimEmployee, DimMonth, FactMonthly, CohortJune2024.
+// Utwórz JEDNĄ miarę na raz; wklejaj od nazwy po końcowy nawias.
+// Jeśli miara o tej nazwie już istnieje, edytuj ją zamiast tworzyć kopię.
+// Objaśnienia miar 1–36: HR_Analytics_Przewodnik_DAX.md. Miary 37–38 opisano poniżej.
+// Dane i wyniki są syntetyczne. Power BI Desktop nie został uruchomiony tutaj.
+
+
+// =============== 01. Zatrudnienie i czas ===============
+
+// 1. Liczy rekordy pracownik–miesiąc dostępne po zastosowaniu filtrów.
+// Format: Whole number, 0 miejsc.
+// Kontrola: 2025: 50 751; wszystkie 36 miesięcy: 137 040.
+Employee Months =
+COUNTROWS ( FactMonthly )
+
+// 2. Liczy stan początkowy dla pojedynczego miesiąca.
+// Format: Whole number, 0 miejsc.
+// Kontrola: Grudzień 2025: 4 329.
+Opening Headcount (monthly helper) =
+CALCULATE (
+    COUNTROWS ( FactMonthly ),
+    FactMonthly[hire_flag] = 0
+)
+
+// 3. Liczy liczbę osób nadal zatrudnionych na koniec pojedynczego miesiąca.
+// Format: Whole number, 0 miejsc.
+// Kontrola: Grudzień 2025: 4 374.
+Closing Headcount (monthly helper) =
+CALCULATE (
+    COUNTROWS ( FactMonthly ),
+    FactMonthly[exit_flag] = 0
+)
+
+// 4. Pokazuje stan zatrudnienia na koniec ostatniego miesiąca w wybranym okresie.
+// Format: Whole number, 0 miejsc.
+// Kontrola: Rok 2025: 4 374, ponieważ ostatni widoczny miesiąc to grudzień 2025.
+Headcount at End =
+VAR LastMonth =
+    MAX ( DimMonth[month_end] )
+RETURN
+    CALCULATE (
+        [Closing Headcount (monthly helper)],
+        KEEPFILTERS ( DimMonth[month_end] = LastMonth )
+    )
+
+// 5. Oblicza średnią z miesięcznych średnich stanów zatrudnienia dla wybranego okresu.
+// Format: Decimal number, 2 miejsca.
+// Kontrola: Rok 2025: 4 159,08.
+Average Headcount =
+AVERAGEX (
+    VALUES ( DimMonth[month_end] ),
+    DIVIDE (
+        [Opening Headcount (monthly helper)] +
+        [Closing Headcount (monthly helper)],
+        2
+    )
+)
+
+// 6. Liczy zatrudnienia w wybranych miesiącach.
+// Format: Whole number, 0 miejsc.
+// Kontrola: Rok 2025: 1 062.
+Hires =
+CALCULATE (
+    COUNTROWS ( FactMonthly ),
+    FactMonthly[hire_flag] = 1
+)
+
+// 7. Liczy wszystkie odejścia w wybranym okresie.
+// Format: Whole number, 0 miejsc.
+// Kontrola: Rok 2025: 622.
+Exits =
+CALCULATE (
+    COUNTROWS ( FactMonthly ),
+    FactMonthly[exit_flag] = 1
+)
+
+// 8. Liczy zmianę zatrudnienia wynikającą z zatrudnień i odejść w wybranym okresie.
+// Format: Whole number, 0 miejsc.
+// Kontrola: Rok 2025: 1 062 - 622 = +440.
+Net Change =
+[Hires] - [Exits]
+
+// 9. Porównuje stan końcowy z końcem tego samego miesiąca rok wcześniej.
+// Format: Whole number, 0 miejsc.
+// Kontrola: Rok 2025: porównanie do 31.12.2024 = 3 934.
+Headcount at End PY =
+VAR LastMonth =
+    MAX ( DimMonth[month_end] )
+VAR PriorYearMonth =
+    EOMONTH ( LastMonth, -12 )
+RETURN
+    IF (
+        ISBLANK ( LastMonth ),
+        BLANK (),
+        CALCULATE (
+            [Closing Headcount (monthly helper)],
+            REMOVEFILTERS ( DimMonth ),
+            DimMonth[month_end] = PriorYearMonth
+        )
+    )
+
+// 10. Pokazuje zmianę liczby osób względem tego samego miesiąca rok wcześniej.
+// Format: Whole number, 0 miejsc.
+// Kontrola: Grudzień 2025 vs grudzień 2024: 4 374 - 3 934 = +440.
+Headcount YoY Change =
+VAR CurrentHeadcount = [Headcount at End]
+VAR PreviousHeadcount = [Headcount at End PY]
+RETURN
+    IF (
+        ISBLANK ( CurrentHeadcount ) || ISBLANK ( PreviousHeadcount ),
+        BLANK (),
+        CurrentHeadcount - PreviousHeadcount
+    )
+
+// 11. Pokazuje procentową zmianę stanu końcowego rok do roku.
+// Format: Percentage, 2 miejsca.
+// Kontrola: Grudzień 2025 vs grudzień 2024: 440 / 3 934 = 11,18%.
+Headcount YoY % =
+DIVIDE (
+    [Headcount YoY Change],
+    [Headcount at End PY]
+)
+
+// 12. Tworzy czytelną etykietę opisującą wybrane miesiące.
+// Format: Tekst — nie ustawiaj formatu procentowego.
+// Kontrola: Rok 2025: `2025-01 to 2025-12 | 12 selected months`.
+Selected Period Label =
+VAR FirstMonth = MIN ( DimMonth[month_end] )
+VAR LastMonth = MAX ( DimMonth[month_end] )
+VAR MonthCount = COUNTROWS ( VALUES ( DimMonth[month_end] ) )
+RETURN
+    IF (
+        ISBLANK ( FirstMonth ),
+        "No month selected",
+        FORMAT ( FirstMonth, "yyyy-MM" ) & " to " &
+        FORMAT ( LastMonth, "yyyy-MM" ) & " | " &
+        FORMAT ( MonthCount, "0" ) & " selected months"
+    )
+
+// =============== 02. Odejścia i rotacja ===============
+
+// 13. Liczy odejścia dobrowolne w bieżącym kontekście.
+// Format: Whole number, 0 miejsc.
+// Kontrola: Rok 2025: 510.
+Voluntary Exits =
+CALCULATE (
+    [Exits],
+    FactMonthly[exit_type] = "Voluntary"
+)
+
+// 14. Liczy odejścia niedobrowolne.
+// Format: Whole number, 0 miejsc.
+// Kontrola: Rok 2025: 112.
+Involuntary Exits =
+CALCULATE (
+    [Exits],
+    FactMonthly[exit_type] = "Involuntary"
+)
+
+// 15. Pokazuje udział odejść dobrowolnych w całej liczbie odejść.
+// Format: Percentage, 2 miejsca.
+// Kontrola: Rok 2025: 510 / 622 = 81,99%.
+Voluntary Share of Exits % =
+DIVIDE ( [Voluntary Exits], [Exits] )
+
+// 16. Pokazuje udział odejść niedobrowolnych we wszystkich odejściach.
+// Format: Percentage, 2 miejsca.
+// Kontrola: Rok 2025: 112 / 622 = 18,01%.
+Involuntary Share of Exits % =
+DIVIDE ( [Involuntary Exits], [Exits] )
+
+// 17. Liczy rotację za wybrane miesiące.
+// Format: Percentage, 2 miejsca.
+// Kontrola: 2025: 622 / 4 159,08 = 14,96%.
+Turnover % =
+DIVIDE ( [Exits], [Average Headcount] )
+
+// 18. Liczy rotację dobrowolną za wybrane miesiące.
+// Format: Percentage, 2 miejsca.
+// Kontrola: Rok 2025: 510 / 4 159,08 = 12,26%.
+Voluntary Turnover % =
+DIVIDE ( [Voluntary Exits], [Average Headcount] )
+
+// 19. Liczy dobrowolne odejścia, przy których nie zapisano powodu.
+// Format: Whole number, 0 miejsc.
+// Kontrola: Rok 2025: 84.
+Voluntary Exits Without Reason =
+CALCULATE (
+    [Voluntary Exits],
+    FactMonthly[exit_reason] = "Not reported"
+)
+
+// 20. Pokazuje, jaki odsetek dobrowolnych odejść nie ma podanego powodu.
+// Format: Percentage, 2 miejsca.
+// Kontrola: Rok 2025: 84 / 510 = 16,47%.
+Voluntary Exits Without Reason % =
+VAR AllVoluntaryExits =
+    CALCULATE (
+        [Voluntary Exits],
+        REMOVEFILTERS ( FactMonthly[exit_reason] )
+    )
+RETURN
+    DIVIDE ( [Voluntary Exits Without Reason], AllVoluntaryExits )
+
+// 21. Pokazuje udział konkretnego powodu w ogólnej liczbie dobrowolnych odejść.
+// Format: Percentage, 2 miejsca.
+// Kontrola: Rok 2025, Compensation: 106 / 510 = 20,78%.
+Voluntary Reason Share % =
+VAR AllVoluntaryExits =
+    CALCULATE (
+        [Voluntary Exits],
+        REMOVEFILTERS ( FactMonthly[exit_reason] )
+    )
+RETURN
+    DIVIDE ( [Voluntary Exits], AllVoluntaryExits )
+
+// =============== 03. Warunki pracy ===============
+
+// 22. Liczy dostępne oceny ankietowe w rekordach pracownik–miesiąc.
+// Format: Whole number, 0 miejsc.
+// Kontrola: Rok 2025: 38 716 dostępnych ocen.
+Survey Responses =
+COUNT ( FactMonthly[engagement_score] )
+
+// 23. Pokazuje udział rekordów miesięcznych z dostępną oceną ankietową.
+// Format: Percentage, 1 lub 2 miejsca.
+// Kontrola: Rok 2025: 38 716 / 50 751 = 76,29%.
+Survey Coverage % =
+DIVIDE ( [Survey Responses], [Employee Months] )
+
+// 24. Liczy średnią dostępnych wyników ankiety.
+// Format: Decimal number, 2 miejsca.
+// Kontrola: Rok 2025: około 3,24 na 5.
+Average Engagement =
+AVERAGE ( FactMonthly[engagement_score] )
+
+// 25. Pokazuje średnie nadgodziny osób aktywnych na koniec ostatniego wybranego miesiąca.
+// Format: Decimal number, 1 miejsce; jednostka: h.
+// Kontrola: Wybrany 2025: grudzień 2025, około 17,5 h.
+Average Overtime (Last Month) =
+VAR LastMonth = MAX ( DimMonth[month_end] )
+RETURN
+    CALCULATE (
+        AVERAGE ( FactMonthly[overtime_hours] ),
+        KEEPFILTERS ( DimMonth[month_end] = LastMonth ),
+        FactMonthly[exit_flag] = 0
+    )
+
+// 26. Oblicza średnią umowną pensję zasadniczą osób aktywnych na koniec ostatniego wybranego miesiąca.
+// Format: Decimal lub Currency PLN, 0–2 miejsca.
+// Kontrola: Wybrany 2025: grudzień 2025, około 11 103,23 PLN.
+Average Base Salary (Last Month) =
+VAR LastMonth = MAX ( DimMonth[month_end] )
+RETURN
+    CALCULATE (
+        AVERAGE ( FactMonthly[monthly_salary_pln] ),
+        KEEPFILTERS ( DimMonth[month_end] = LastMonth ),
+        FactMonthly[exit_flag] = 0
+    )
+
+// =============== 04. Kohorta czerwiec 2024 ===============
+
+// 27. Liczy osoby w stałej kohorcie.
+// Format: Whole number, 0 miejsc.
+// Kontrola: Bez filtra działu: 3 770.
+Cohort Employees =
+COUNTROWS ( CohortJune2024 )
+
+// 28. Liczy osoby z kohorty, które odeszły w lipcu–wrześniu 2024.
+// Format: Whole number, 0 miejsc.
+// Kontrola: Bez filtra działu: 180.
+Cohort Exits =
+SUM ( CohortJune2024[exited_in_3_months] )
+
+// 29. Liczy odsetek osób z wybranej grupy kohorty, które odeszły w kolejnych 3 miesiącach.
+// Format: Percentage, 2 miejsca.
+// Kontrola: Cała kohorta: 180 / 3 770 = 4,77%; grupy: 3,83%, 4,13% i 6,67%.
+Cohort Exit % =
+DIVIDE ( [Cohort Exits], [Cohort Employees] )
+
+// 30. Pokazuje odsetek odejść w kohorcie z mniej niż 10 godzinami nadliczbowymi.
+// Format: Percentage, 2 miejsca.
+// Kontrola: Cała kohorta: 34 / 888 = 3,83%.
+Cohort Exit % Low =
+CALCULATE (
+    [Cohort Exit %],
+    CohortJune2024[overtime_group] = "Low (<10 h)"
+)
+
+// 31. Pokazuje odsetek odejść w kohorcie z co najmniej 20 godzinami nadliczbowymi.
+// Format: Percentage, 2 miejsca.
+// Kontrola: Cała kohorta: 71 / 1 064 = 6,67%.
+Cohort Exit % High =
+CALCULATE (
+    [Cohort Exit %],
+    CohortJune2024[overtime_group] = "High (20+ h)"
+)
+
+// 32. Liczy różnicę odsetków obu grup w punktach procentowych.
+// Format: Decimal number, 2 miejsca; etykieta `p.p.`.
+// Kontrola: Bez filtra działu: około +2,84 p.p.
+Cohort Exit Gap (pp) =
+VAR LowRate = [Cohort Exit % Low]
+VAR HighRate = [Cohort Exit % High]
+RETURN
+    IF (
+        ISBLANK ( LowRate ) || ISBLANK ( HighRate ),
+        BLANK (),
+        ( HighRate - LowRate ) * 100
+    )
+
+// =============== 05. Dynamiczne wnioski ===============
+
+// 33. Dynamicznie wskazuje dział z najwyższą rotacją w wybranej populacji.
+// Format: Tekst.
+// Kontrola: 2025 bez innych filtrów: Operations około 21,2%; wybrana populacja około 15,0%.
+Overview Insight =
+VAR DepartmentRates =
+    ADDCOLUMNS (
+        VALUES ( DimEmployee[department] ),
+        "@Rate", [Turnover %]
+    )
+VAR BestRow =
+    TOPN (
+        1,
+        FILTER (
+            DepartmentRates,
+            NOT ISBLANK ( DimEmployee[department] ) &&
+            NOT ISBLANK ( [@Rate] )
+        ),
+        [@Rate], DESC,
+        DimEmployee[department], ASC
+    )
+VAR DepartmentName = MAXX ( BestRow, DimEmployee[department] )
+VAR DepartmentRate = MAXX ( BestRow, [@Rate] )
+VAR SelectionRate = [Turnover %]
+RETURN
+    IF (
+        ISBLANK ( DepartmentName ) || ISBLANK ( SelectionRate ),
+        "No turnover data in the selected period.",
+        DepartmentName & " has the highest turnover among selected departments: " &
+        FORMAT ( DepartmentRate, "0.0%" ) &
+        "; the selected population is at " & FORMAT ( SelectionRate, "0.0%" ) & "."
+    )
+
+// 34. Tworzy dynamiczny opis brakujących powodów dobrowolnych odejść.
+// Format: Tekst.
+// Kontrola: 2025: 84 z 510 dobrowolnych odejść, czyli około 16,5%.
+Turnover Insight =
+VAR AllVoluntary =
+    CALCULATE (
+        [Voluntary Exits],
+        REMOVEFILTERS ( FactMonthly[exit_reason] )
+    )
+VAR MissingReason = COALESCE ( [Voluntary Exits Without Reason], 0 )
+RETURN
+    IF (
+        ISBLANK ( AllVoluntary ) || AllVoluntary = 0,
+        "No voluntary exits in the selected period.",
+        FORMAT ( MissingReason, "#,0" ) & " of " &
+        FORMAT ( AllVoluntary, "#,0" ) &
+        " voluntary exits have no reason recorded (" &
+        FORMAT ( DIVIDE ( MissingReason, AllVoluntary ), "0.0%" ) & ")."
+    )
+
+// 35. Tworzy opis działu z najwyższymi nadgodzinami i kompletności ankiet.
+// Format: Tekst.
+// Kontrola: 2025: Operations około 22,1 h w grudniu; coverage około 76,3% w wybranych miesiącach.
+Work Conditions Insight =
+VAR DepartmentHours =
+    ADDCOLUMNS (
+        VALUES ( DimEmployee[department] ),
+        "@Hours", [Average Overtime (Last Month)]
+    )
+VAR TopRow =
+    TOPN (
+        1,
+        FILTER (
+            DepartmentHours,
+            NOT ISBLANK ( DimEmployee[department] ) &&
+            NOT ISBLANK ( [@Hours] )
+        ),
+        [@Hours], DESC,
+        DimEmployee[department], ASC
+    )
+VAR DepartmentName = MAXX ( TopRow, DimEmployee[department] )
+VAR Hours = MAXX ( TopRow, [@Hours] )
+VAR LastMonth = MAX ( DimMonth[month_end] )
+VAR Coverage = [Survey Coverage %]
+VAR CoverageText =
+    IF ( ISBLANK ( Coverage ), "not available", FORMAT ( Coverage, "0.0%" ) )
+RETURN
+    IF (
+        ISBLANK ( DepartmentName ),
+        "No workload data for the selected period.",
+        DepartmentName & " has the highest average overtime in " &
+        FORMAT ( LastMonth, "MMM yyyy" ) & ": " &
+        FORMAT ( Hours, "0.0" ) & " h. Survey coverage for selected months: " &
+        CoverageText & "."
+    )
+
+// 36. Opisuje różnicę między skrajnymi grupami nadgodzin w stałej kohorcie.
+// Format: Tekst.
+// Kontrola: Bez filtra działu: 2,84 punktu procentowego wyżej w grupie 20+ h.
+Cohort Insight =
+VAR Gap = [Cohort Exit Gap (pp)]
+RETURN
+    IF (
+        ISBLANK ( Gap ),
+        "Not enough data to compare the two overtime groups.",
+        IF (
+            Gap = 0,
+            "In the fixed June 2024 cohort, both groups have the same exit rate. Association is not proof of cause.",
+            "In the fixed June 2024 cohort, the 20+ h group's exit rate was " &
+            FORMAT ( ABS ( Gap ), "0.00" ) & " percentage points " &
+            IF ( Gap > 0, "higher", "lower" ) &
+            " than the <10 h group's rate. Association is not proof of cause."
+        )
+    )
+
+
+// =============== 06. Dodatki do projektu Dark Neon ===============
+
+// 37. Dynamiczny podpis porównujący stan końcowy z tym samym miesiącem rok wcześniej.
+// Format: tekst; karta lub podpis karty Workforce.
+// Kontrola: 2025: +440 vs Dec 2024 (nazwa miesiąca zależy od ustawień modelu).
+Headcount YoY Label =
+VAR Difference = [Headcount YoY Change]
+VAR LastMonth = MAX ( DimMonth[month_end] )
+VAR PreviousMonth = EOMONTH ( LastMonth, -12 )
+VAR SignPrefix =
+    IF ( Difference > 0, "+", IF ( Difference < 0, "-", "" ) )
+RETURN
+    IF (
+        ISBLANK ( Difference ) || ISBLANK ( LastMonth ),
+        "No prior-year data",
+        SignPrefix & FORMAT ( ABS ( Difference ), "#,0" ) &
+        " vs " & FORMAT ( PreviousMonth, "MMM yyyy" )
+    )
+
+// 38. Tekst pokazujący odsetek odejść i liczebność grupy w stałej kohorcie.
+// Format: tekst; macierz z działem w wierszach i grupą nadgodzin w kolumnach.
+// Kontrola: Operations i grupa Low: 10,6% (n=66), zależnie od języka modelu.
+Cohort Rate and N =
+VAR People = [Cohort Employees]
+VAR Rate = [Cohort Exit %]
+RETURN
+    IF (
+        ISBLANK ( People ) || People = 0 || ISBLANK ( Rate ),
+        BLANK (),
+        FORMAT ( Rate, "0.0%" ) & " (n=" & FORMAT ( People, "#,0" ) & ")"
+    )
