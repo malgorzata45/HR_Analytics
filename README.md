@@ -162,8 +162,6 @@ When several years are selected, period turnover covers the **whole selected per
 | [`08_analiza_zaawansowana.sql`](sql/08_analiza_zaawansowana.sql) | Rolling rates, rankings, median salary and cohort comparison |
 | [`09_testy_sql.sql`](sql/09_testy_sql.sql) | Check integrity, continuity and cohort follow-up |
 
-The [data dictionary](docs/03_SLOWNIK_DANYCH.md), [results notes](docs/04_WYNIKI_I_WNIOSKI.md) and [Power BI measure reference](powerbi/MEASURES.dax) provide additional detail.
-
 ## Reproduce the SQL analysis
 
 **Requirements:** SQL Server, SQL Server Management Studio, Python, `pyodbc`, and Microsoft ODBC Driver 17 or 18 for SQL Server. The supplied loader uses Windows authentication.
@@ -180,7 +178,7 @@ The [data dictionary](docs/03_SLOWNIK_DANYCH.md), [results notes](docs/04_WYNIKI
    Replace `YOUR_SQL_SERVER_NAME` with the server name used in SSMS. The loader expects the complete CSV extracts and **replaces the contents of this project's staging tables** in one transaction. If Python is not on `PATH`, use the full path to `python.exe`.
 
 3. In SSMS, run `sql/02_quality_checks.sql` through `sql/09_testy_sql.sql` in order. Review the result sets and the comments in each file.
-4. For the reporting model, consult [`powerbi/INSTRUKCJA_POWER_BI.md`](powerbi/INSTRUKCJA_POWER_BI.md) and the [DAX reference](powerbi/MEASURES.dax). The screenshots show the Power BI report. To reproduce its exact final state, use the corresponding `.pbix` file if included or separately documented report configuration; the reference DAX file may not contain every measure added while building the report.
+4. The screenshots show the Power BI report. 
 
 ## Limitations and interpretation
 
@@ -192,6 +190,3 @@ The [data dictionary](docs/03_SLOWNIK_DANYCH.md), [results notes](docs/04_WYNIKI
 
 The project is intended to demonstrate SQL analysis, metric design and reporting—not to support decisions about real employees.
 
----
-
-**Author:** Małgorzata Gąsior
