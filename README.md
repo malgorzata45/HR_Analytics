@@ -119,9 +119,9 @@ See the full workflow in [`sql/08_analiza_zaawansowana.sql`](sql/08_analiza_zaaw
 
 | File | One row represents | Rows |
 |---|---|---:|
-| [`departments.csv`](data/raw/departments.csv) | One fictional department | 6 |
-| [`employees.csv`](data/raw/employees.csv) | One fictional employee | 6,147 |
-| [`monthly_snapshots.csv`](data/raw/monthly_snapshots.csv) | One employee present during one month | 137,040 |
+| [`departments.csv`](data/departments.csv) | One fictional department | 6 |
+| [`employees.csv`](data/employees.csv) | One fictional employee | 6,147 |
+| [`monthly_snapshots.csv`](data/monthly_snapshots.csv) | One employee present during one month | 137,040 |
 
 An employee can appear in several monthly snapshots. An employee who exits during a month is still included in that month's snapshot.
 
